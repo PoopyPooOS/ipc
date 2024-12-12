@@ -1,8 +1,20 @@
+#[allow(
+    unused_imports,
+    reason = "This warning only appears when feature gates arent properly applied in an IDE"
+)]
 use crate::{client::Client, IpcError};
 use logger::warn;
+#[allow(
+    unused_imports,
+    reason = "This warning only appears when feature gates arent properly applied in an IDE"
+)]
 use std::{fs, os::unix::net::UnixListener, path::PathBuf, thread};
 
 pub struct Server {
+    #[allow(
+        dead_code,
+        reason = "This warning only appears when feature gates arent properly applied in an IDE"
+    )]
     listener: UnixListener,
     socket_path: PathBuf,
 }
