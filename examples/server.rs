@@ -1,34 +1,39 @@
 use ipc::{IpcError, Server};
-use logger::{error, info, trace};
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Serialize, Deserialize)]
-struct User {
-    username: String,
-    password: String,
-}
+use std::{
+    io,
+    thread::{self, sleep},
+    time::Duration,
+};
 
 fn main() -> Result<(), IpcError> {
-    trace!("Starting server");
-    let server = Server::new("example.sock")?;
-    trace!("Starting receive loop");
-
-    server.on_client(|mut client| {
-        info!("Client connected");
-        let received = client.read::<User>();
-
-        match received {
-            Ok(user) => {
-                info!(format!("Got user: {user:#?}"));
-                client.send(true).expect("Failed to send confirmation message to client");
+    thread::spawn(move || {
+        // Start server
+        let server = match Server::new("example.sock") {
+            Ok(server) => server,
+            Err(IpcError::Io(ref io_err)) if io_err.kind() == io::ErrorKind::AddrInUse => {
+                eprintln!("Error: server already running");
+                return Ok(());
             }
-            Err(err) => {
-                error!(format!("{err:#?}"));
-                client.send(false).expect("Failed to send confirmation message to client");
-            }
-        }
-    })?;
+            Err(err) => return Err(err),
+        };
 
-    info!("Server exiting");
-    Ok(())
+        println!("Waiting for clients...");
+
+        // Set client handler
+        server.on_client(move |mut client| {
+            println!("Client connected");
+
+            loop {
+                // A `Client` struct is just a high level abstraction for a `UnixStream`
+                client.send("Hello, world!")?;
+            }
+        })?;
+
+        Ok(())
+    });
+
+    loop {
+        println!("Running other tasks here while handling IPC in the background");
+        sleep(Duration::from_secs(2));
+    }
 }

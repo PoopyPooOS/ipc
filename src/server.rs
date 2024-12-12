@@ -14,21 +14,67 @@ impl Server {
     pub fn new(socket_path: impl Into<PathBuf>) -> Result<Self, IpcError> {
         let socket_path = socket_path.into();
         let listener = UnixListener::bind(&socket_path)?;
+
         Ok(Self { listener, socket_path })
     }
 
     /// Add a handler for incoming connections.
     /// # Errors
     /// This function will return an error if the stream cannot be used.
-    pub fn on_client<F>(&self, mut handler: F) -> Result<(), IpcError>
+    #[cfg(all(feature = "clone-handler", not(any(feature = "rwlock-handler", feature = "sync-handler"))))]
+    pub fn on_client<F>(&self, handler: F) -> Result<(), IpcError>
     where
-        F: FnMut(Client) + Send + Copy + 'static,
+        F: FnMut(Client) -> Result<(), IpcError> + Clone + Send + 'static,
     {
         for stream in self.listener.incoming() {
             let client = Client::from_stream(stream?);
+            let mut handler = handler.clone();
+
             thread::spawn(move || {
-                handler(client);
+                let _ = handler(client);
             });
+        }
+
+        Ok(())
+    }
+
+    /// Add a handler for incoming connections.
+    /// # Errors
+    /// This function will return an error if the stream cannot be used.
+    #[cfg(all(feature = "rwlock-handler", not(any(feature = "clone-handler", feature = "sync-handler"))))]
+    pub fn on_client<F>(&self, handler: F) -> Result<(), IpcError>
+    where
+        F: Fn(Client) -> Result<(), IpcError> + Send + Sync + 'static,
+    {
+        use std::sync::{Arc, RwLock};
+
+        let handler = Arc::new(RwLock::new(handler));
+
+        for stream in self.listener.incoming() {
+            let client = Client::from_stream(stream?);
+            let handler = Arc::clone(&handler);
+
+            thread::spawn(move || {
+                let handler = handler.read().unwrap();
+                let _ = handler(client);
+            });
+        }
+
+        Ok(())
+    }
+
+    /// Add a handler for incoming connections.
+    /// # Errors
+    /// This function will return an error if the stream cannot be used.
+    #[cfg(all(feature = "sync-handler", not(any(feature = "clone-handler", feature = "rwlock-handler"))))]
+    pub fn on_client<F>(&self, handler: F) -> Result<(), IpcError>
+    where
+        F: Fn(Client) -> Result<(), IpcError> + Send + Sync + 'static,
+    {
+        for stream in self.listener.incoming() {
+            let client = Client::from_stream(stream?);
+
+            let _ = handler(client);
         }
 
         Ok(())

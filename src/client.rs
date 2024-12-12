@@ -2,14 +2,13 @@ use crate::IpcError;
 use serde::{Deserialize, Serialize};
 use std::{
     io::{Read, Write},
-    net::Shutdown,
     os::unix::net::UnixStream,
     path::Path,
 };
 
 #[derive(Debug)]
 pub struct Client {
-    stream: UnixStream,
+    pub stream: UnixStream,
 }
 
 impl Client {
@@ -31,10 +30,13 @@ impl Client {
     /// This function will return an error if serialization fails.
     pub fn send<T: Serialize>(&mut self, data: T) -> Result<(), IpcError> {
         let serialized_data = bincode::serialize(&data)?;
+        let length = (serialized_data.len() as u64).to_be_bytes();
 
-        self.stream.write_all(&serialized_data)?;
+        let mut message = length.to_vec();
+        message.extend_from_slice(&serialized_data);
+
+        self.stream.write_all(&message)?;
         self.stream.flush()?;
-        self.stream.shutdown(Shutdown::Write)?;
 
         Ok(())
     }
@@ -42,13 +44,20 @@ impl Client {
     /// Read data from the stream.
     /// # Errors
     /// This function will return an error if deserialization fails.
-    pub fn read<T: for<'de> Deserialize<'de>>(&mut self) -> Result<T, IpcError> {
-        let mut buffer = Vec::new();
-        self.stream.read_to_end(&mut buffer)?;
+    pub fn receive<T: for<'de> Deserialize<'de>>(&mut self) -> Result<T, IpcError> {
+        let mut length_buffer = [0u8; 8];
+        self.stream.read_exact(&mut length_buffer)?;
+        let length = u64::from_be_bytes(length_buffer);
+        let length = usize::try_from(length).map_err(|_| IpcError::BufferLengthTruncated)?;
+
+        let mut buffer = vec![0; length];
+        self.stream.read_exact(&mut buffer)?;
+
         bincode::deserialize(&buffer).map_err(Into::into)
     }
 
     /// Returns whether or not the client is connected.
+    /// Note: This usually doesnt work properly.
     #[must_use]
     pub fn is_connected(&self) -> bool {
         self.stream.peer_addr().is_ok()
