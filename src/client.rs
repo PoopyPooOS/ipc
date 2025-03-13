@@ -1,4 +1,5 @@
 use crate::IpcError;
+use bincode::config::standard;
 use serde::{Deserialize, Serialize};
 use std::{
     io::{Read, Write},
@@ -29,7 +30,7 @@ impl Client {
     /// # Errors
     /// This function will return an error if serialization fails.
     pub fn send<T: Serialize>(&mut self, data: T) -> Result<(), IpcError> {
-        let serialized_data = bincode::serialize(&data)?;
+        let serialized_data = bincode::serde::encode_to_vec(data, standard())?;
         let length = (serialized_data.len() as u64).to_be_bytes();
 
         let mut message = length.to_vec();
@@ -53,7 +54,7 @@ impl Client {
         let mut buffer = vec![0; length];
         self.stream.read_exact(&mut buffer)?;
 
-        bincode::deserialize(&buffer).map_err(Into::into)
+        bincode::serde::decode_from_slice(&buffer, standard())?.0
     }
 
     /// Returns whether or not the client is connected.

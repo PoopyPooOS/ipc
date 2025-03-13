@@ -2,7 +2,7 @@
     unused_imports,
     reason = "This warning only appears when feature gates arent properly applied in an IDE"
 )]
-use crate::{client::Client, IpcError};
+use crate::{IpcError, client::Client};
 use logger::warn;
 #[allow(
     unused_imports,
@@ -27,13 +27,19 @@ impl Server {
         let socket_path = socket_path.into();
         let listener = UnixListener::bind(&socket_path)?;
 
-        Ok(Self { listener, socket_path })
+        Ok(Self {
+            listener,
+            socket_path,
+        })
     }
 
     /// Add a handler for incoming connections.
     /// # Errors
     /// This function will return an error if the stream cannot be used.
-    #[cfg(all(feature = "clone-handler", not(any(feature = "rwlock-handler", feature = "sync-handler"))))]
+    #[cfg(all(
+        feature = "clone-handler",
+        not(any(feature = "rwlock-handler", feature = "sync-handler"))
+    ))]
     pub fn on_client<F>(&self, handler: F) -> Result<(), IpcError>
     where
         F: FnMut(Client) -> Result<(), IpcError> + Clone + Send + 'static,
@@ -53,7 +59,10 @@ impl Server {
     /// Add a handler for incoming connections.
     /// # Errors
     /// This function will return an error if the stream cannot be used.
-    #[cfg(all(feature = "rwlock-handler", not(any(feature = "clone-handler", feature = "sync-handler"))))]
+    #[cfg(all(
+        feature = "rwlock-handler",
+        not(any(feature = "clone-handler", feature = "sync-handler"))
+    ))]
     pub fn on_client<F>(&self, handler: F) -> Result<(), IpcError>
     where
         F: Fn(Client) -> Result<(), IpcError> + Send + Sync + 'static,
@@ -78,7 +87,10 @@ impl Server {
     /// Add a handler for incoming connections.
     /// # Errors
     /// This function will return an error if the stream cannot be used.
-    #[cfg(all(feature = "sync-handler", not(any(feature = "clone-handler", feature = "rwlock-handler"))))]
+    #[cfg(all(
+        feature = "sync-handler",
+        not(any(feature = "clone-handler", feature = "rwlock-handler"))
+    ))]
     pub fn on_client<F>(&self, handler: F) -> Result<(), IpcError>
     where
         F: Fn(Client) -> Result<(), IpcError> + Send + Sync + 'static,
@@ -95,6 +107,7 @@ impl Server {
 
 impl Drop for Server {
     fn drop(&mut self) {
-        fs::remove_file(&self.socket_path).unwrap_or_else(|err| warn!(format!("Failed to clean up socket file: {err}")));
+        fs::remove_file(&self.socket_path)
+            .unwrap_or_else(|err| warn!("Failed to clean up socket file: {err}"));
     }
 }

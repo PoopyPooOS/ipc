@@ -1,9 +1,5 @@
 use ipc::{IpcError, Server};
-use std::{
-    io,
-    thread::{self, sleep},
-    time::Duration,
-};
+use std::{io, thread, time::Duration};
 
 fn main() -> Result<(), IpcError> {
     thread::spawn(move || {
@@ -34,6 +30,6 @@ fn main() -> Result<(), IpcError> {
 
     loop {
         println!("Running other tasks here while handling IPC in the background");
-        sleep(Duration::from_secs(2));
+        thread::sleep(Duration::from_secs(2));
     }
 }

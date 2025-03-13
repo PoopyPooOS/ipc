@@ -1,15 +1,22 @@
 use serde::{Deserialize, Serialize};
-use std::{error::Error, fmt::Display, io, str::FromStr};
+use std::{io, str::FromStr};
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum IpcError {
-    Io(io::Error),
-    Serialization(bincode::Error),
+    #[error("I/O Error: {0}")]
+    Io(#[from] io::Error),
+    #[error("Error decoding data: {0}")]
+    Decode(#[from] bincode::error::DecodeError),
+    #[error("Error encoding data: {0}")]
+    Encode(#[from] bincode::error::EncodeError),
+    #[error("Connection closed unexpectedly")]
     ConnectionClosed,
-    ConnectionError,
     /// This error occurs if the CPU isn't 64bit and the buffer length prefix is too long.
+    #[error("Data buffer length was truncated")]
     BufferLengthTruncated,
     /// This error mostly occurs when deserializing an [`IpcError`]
+    #[error("Unknown error")]
     Unknown,
 }
 
@@ -18,21 +25,15 @@ impl PartialEq for IpcError {
         matches!(
             (self, other),
             (IpcError::Io(_), IpcError::Io(_))
-                | (IpcError::Serialization(_), IpcError::Serialization(_))
+                | (IpcError::Decode(_), IpcError::Decode(_))
+                | (IpcError::Encode(_), IpcError::Encode(_))
                 | (IpcError::ConnectionClosed, IpcError::ConnectionClosed)
-                | (IpcError::ConnectionError, IpcError::ConnectionError)
-                | (IpcError::BufferLengthTruncated, IpcError::BufferLengthTruncated)
+                | (
+                    IpcError::BufferLengthTruncated,
+                    IpcError::BufferLengthTruncated
+                )
                 | (IpcError::Unknown, IpcError::Unknown)
         )
-    }
-}
-
-impl Error for IpcError {
-}
-
-impl Display for IpcError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
     }
 }
 
@@ -41,18 +42,6 @@ impl FromStr for IpcError {
 
     fn from_str(_: &str) -> Result<Self, Self::Err> {
         Ok(IpcError::Unknown)
-    }
-}
-
-impl From<io::Error> for IpcError {
-    fn from(value: io::Error) -> Self {
-        Self::Io(value)
-    }
-}
-
-impl From<bincode::Error> for IpcError {
-    fn from(value: bincode::Error) -> Self {
-        Self::Serialization(value)
     }
 }
 
